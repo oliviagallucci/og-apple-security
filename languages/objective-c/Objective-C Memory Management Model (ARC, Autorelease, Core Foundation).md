@@ -71,3 +71,21 @@ Draining a pool (pop) calls `release` on each object in that pool. Under ARC, th
 \* ARV (autorelease return value) and RRV (retain return value) are compiler/runtime optimizations in Objective-C that manage how returned objects are retained or autoreleased to eliminate unnecessary memory operations and improve performance.
 
 ---
+
+## Thread considerations
+Each thread in a Cocoa app maintains its own autorelease pool stack (the main thread’s pool is set up by Cocoa; background threads that you create should either use an `@autoreleasepool` or you must manually create an `NSAutoreleasePool` if using MRR*). 
+
+--- 
+
+\* MRR (Manual Retain-Release) is the original Objective-C memory management model where developers explicitly call `retain`, `release`, and `autorelease` to manage object lifetimes.
+
+--- 
+
+Also, reference counting in Objective-C is thread-safe for *system* objects by default: `retain`/`release` on Cocoa objects are atomic by default (to avoid crashes if two threads retain/release the same object concurrently). There are non-atomic variants* (e.g., `nonatomic` property attributes) where you manage your own locking if needed for performance.
+
+---
+
+\* In Objective-C, an **atomic** property ensures thread-safe access by locking reads and writes, while a **nonatomic** property does not, offering faster performance but requiring manual synchronization in multithreaded contexts.
+
+--- 
+
