@@ -89,3 +89,5 @@ Also, reference counting in Objective-C is thread-safe for *system* objects by d
 
 --- 
 
+## Toll-free bridging and ARC
+It’s worth reiterating that ARC does _not_ garbage-collect Core Foundation objects. If you create a CF object (e.g. `CFArrayRef`) and don’t transfer it with `__bridge_transfer`, you must CFRelease it to [avoid leaks](https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFDesignConcepts/Articles/tollFreeBridgedTypes.html). Conversely, failing to `CFBridgingRetain` when handing an Objective-C object to CF can lead to it being deallocated too early. Apple’s memory management guides provide rules to manage these interactions. The interplay between ARC and low-level C APIs is one of the few areas where developers still need to pay close attention, as ARC can’t fully automate those without additional hints.
