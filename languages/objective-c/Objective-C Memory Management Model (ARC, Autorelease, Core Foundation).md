@@ -18,7 +18,7 @@ Objective-C’s Foundation classes often have **Core Foundation (CF) counterpart
 
 ---
 
-\* A toll-free bridged type is a pair of Core Foundation (C) and Objective-C types that refer to the same underlying object in memory, allowing them to be used interchangeably without conversion or performance overhead.
+\* A [toll-free bridged type](http://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFDesignConcepts/Articles/tollFreeBridgedTypes.html) is a pair of Core Foundation (C) and Objective-C types that refer to the same underlying object in memory, allowing them to be used interchangeably without conversion or performance overhead.
 
 ---
 
@@ -30,4 +30,36 @@ For example, `CFStringRef` and `NSString *` can refer to the same object. The co
 
 These bridging annotations are important for proper/good (?) memory management when mixing Core Foundation with Objective-C objects. They prevent leaks and double-frees by clarifying ownership. (If ARC encounters a CF-returning function following the Core Foundation naming conventions--e.g., `Create` or `Copy` in the name--it *might* know it’s owned and require manual release, but in general the above explicit bridges are used to be safe.)
 
-s
+## Runtime behavior and implementation 
+The Objective-C runtime implements reference counting efficiently (at least to my knowledge, lol). 
+
+As of 2025, Objective-C (64-bit iOS/tvOS/macOS) uses a **“non-pointer isa”** optimization: instead of each object storing just a class pointer in its `isa` field, the `isa` is a bitfield that can pack additional info such as the object’s [retain count and flags](https://alwaysprocessing.blog/2023/01/19/objc-class-isa) for certain states. In 64-bit, pointers have extra high-order bits available due to alignment and address space limitations. Apple utilizes those bits to store: 
+
+- an **inline reference count** (often called `extra_rc`), and 
+- flags like **`has_assoc`** (object has associated objects), 
+- **`weakly_referenced`** (there are weak pointers to it), 
+- **`has_cxx_dtor`** (it has a C++/ObjC destructor to run), etc.
+
+This means for most objects, the retain count is incremented in a field of the object itself (no separate hash table needed), and only if the count grows beyond what fits in those bits does the runtime resort to an out-of-line storage (a side table). Similarly, if an object gets associated objects (using `objc_setAssociatedObject`) or weak references, the runtime marks those bits and will use auxiliary structures to track them.
+
+When an object is deallocated (either because ARC determined it’s unreachable or manual `release` brought count to zero), the runtime checks those flags to decide the deallocation path. There is a **fast deallocation path**: if the object has no associated objects, no weak refs, and no special cleanup needed, it can skip some housekeeping. In fact, in Apple’s open-source runtime you can see:
+
+```c
+// code from "alwaysprocessing.blog"
+if (isa().nonpointer &&            // using non-pointer isa
+    !isa().weakly_referenced && 
+    !isa().has_assoc && 
+    !isa().has_cxx_dtor && 
+    !isa().has_sidetable_rc) {
+        free(this);               // directly free object memory
+} else {
+        object_dispose((id)this); // do full cleanup, then free
+}
+```
+
+If none of the extra work is needed, the object’s memory is immediately freed with `free()`. Otherwise, `object_dispose` will do things like zero out any weak reference entries, remove associated objects, call C++ destructors (`.cxx_destruct` methods) to clean up C++ ivars, etc., then free the memory. 
+
+This design optimizes the common case (objects without weak refs or associations) while still correctly handling the more complex cases. Notably, if an object’s **retain count** overflowed the inline capacity (rare, only if an object was legitimately retained thousands of times or maliciously so), the `has_sidetable_rc` bit is set and the extra counts live in a side table structure; the runtime will consult and clear that on `object_dispose`.
+
+
+
