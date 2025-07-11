@@ -1,2 +1,10 @@
 # og-apple-security
 my notes on Apple security 
+
+
+TODOs
+
+- create readme 
+- document how folder is organized
+- upload language docs
+
