@@ -61,5 +61,13 @@ If none of the extra work is needed, the object’s memory is immediately freed 
 
 This design optimizes the common case (objects without weak refs or associations) while still correctly handling the more complex cases. Notably, if an object’s **retain count** overflowed the inline capacity (rare, only if an object was legitimately retained thousands of times or maliciously so), the `has_sidetable_rc` bit is set and the extra counts live in a side table structure; the runtime will consult and clear that on `object_dispose`.
 
+## Autorelease implementation
+Autorelease pools are implemented as simple stacks of pointers. An `@autoreleasepool` block in ARC is translated into calls to `objc_autoreleasePoolPush()` at the start and `objc_autoreleasePoolPop()` at the end. When an object is sent `autorelease`, it’s added to the latest pool. 
 
+Draining a pool (pop) calls `release` on each object in that pool. Under ARC, the compiler often optimizes away autoreleases for return values (using LLVM’s “return value optimization” known as ARV* and RRVs*) to avoid unnecessary object churn. Still, understanding that autoreleased objects will live until the pool is drained is important for performance... hence patterns like [wrapping tight loops](https://medium.com/@melissazm/advanced-memory-management-in-ios-exploring-arc-manual-retain-release-and-memory-leaks-f5c69ed68417) in their own autorelease pool to prevent a large transient memory spike.
 
+---
+
+\* ARV (autorelease return value) and RRV (retain return value) are compiler/runtime optimizations in Objective-C that manage how returned objects are retained or autoreleased to eliminate unnecessary memory operations and improve performance.
+
+---
