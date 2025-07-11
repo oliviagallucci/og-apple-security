@@ -1,3 +1,5 @@
+# Objective-C Memory Management Model (ARC, Autorelease, Core Foundation)
+
 ## Reference counting basics
 Objective-C uses **retain counts** to manage object lifetime. When an object is created or copied, it starts with a retain count of 1 (owned by the creator). Any part of code that needs to hold onto the object will increment the retain count (retain), and when done will decrement (release). When the retain count drops to zero, the object is deallocated immediately. Under ARC, these retains and releases are inserted by the compiler. For example, in manual terms:
 
@@ -91,3 +93,4 @@ Also, reference counting in Objective-C is thread-safe for *system* objects by d
 
 ## Toll-free bridging and ARC
 It’s worth reiterating that ARC does _not_ garbage-collect Core Foundation objects. If you create a CF object (e.g. `CFArrayRef`) and don’t transfer it with `__bridge_transfer`, you must CFRelease it to [avoid leaks](https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFDesignConcepts/Articles/tollFreeBridgedTypes.html). Conversely, failing to `CFBridgingRetain` when handing an Objective-C object to CF can lead to it being deallocated too early. Apple’s memory management guides provide rules to manage these interactions. The interplay between ARC and low-level C APIs is one of the few areas where developers still need to pay close attention, as ARC can’t fully automate those without additional hints.
+
