@@ -21,9 +21,21 @@ In the past, Apple’s GC used a custom allocator (“Auto Zone”) that coexist
 As noted, NSZone was a mechanism for custom memory allocation pools. You could create an NSZone to allocate a bunch of objects together, perhaps to improve locality or facilitate bulk deallocation. This was a Mach-era concept that never proved very useful and is essentially deprecated. 
 
 At present (afaik), Objective-C runtime just ignores the zone parameter and uses the default heap. Apple explicitly [states](https://developer.apple.com/library/archive/releasenotes/ObjectiveC/RN-TransitioningToARC/Introduction/Introduction.html#//apple_ref/doc/uid/TP40011226-CH1-SW14): “There is no need to use NSZone any more. They are ignored by the modern Objective-C runtime.” So, Objective-C doesn’t really integrate with malloc “zones” in any special way today. Tools like **Guard Malloc** (for debugging buffer overruns) or **malloc nano/secure modes** apply to Objective-C objects the same as any heap allocation.
+## Tagged pointers
+One interesting memory optimization in Objective-C (since iOS 7 / OS X Mavericks era) is **tagged pointers**. Certain classes--notably NSNumber, NSDate, and a few others (even NSString for small strings on recent systems)--don’t use malloc at all for certain values. Instead, the pointer value itself is encoded with the data. 
 
+For example, instead of allocating a full NSNumber object for an integer 42, the runtime can represent it as a pointer where some bits actually store the integer value and a tag that tells the runtime “this isn’t a real heap pointer, it’s an encoded number.” These tagged pointers have a special bit pattern (usually LSB=1 or a specific high bit set) so that the runtime recognizes them. When an API like `[NSNumber numberWithInt:42]` is called, you might get a tagged pointer (no heap allocation, extremely fast, no need to free). The `objc_msgSend` knows to check for tagged pointers and, if found, treat them differently (in fact, many operations on them are implemented by simply checking the pointer bits). This reduces memory usage and fragmentation for lots of small immutable objects. 
 
+Tagged pointers are an interplay* between the runtime and CPU addressing (it uses the fact that addresses are aligned and some bits are unused). 
 
+---
 
+\* not a security term, but an interplay is the dynamic interaction or mutual influence between two or more elements that affect each other’s behavior or outcome.
+
+---
+
+From a security perspective, tagged pointers are **non-pointer data masquerading as pointers**, which could confuse traditional exploit techniques. But nowadays, pointer authentication also helps here (PAC has to ignore those or treat the tag bits appropriately). 
+
+If an exploit tried to forge a tagged pointer, they’d have to ensure the bits matched a valid encoding or the runtime would just treat it as a huge odd pointer and likely crash on access. In short ig, **tagged pointers improve performance and memory usage** for certain Obj-C objects by avoiding malloc entirely... an example of runtime and memory allocator integration for optimization.
 
 
